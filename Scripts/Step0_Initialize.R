@@ -1,10 +1,11 @@
 
 # Define names of packages to load for scripts. Not all are actually necessary.
 
-Packages <- c("bigmemory", "broom", "caret", "compiler", "caTools", "data.table", "doParallel", "dplyr", "dslabs", "e1071", "fastAdaboost", "foreach", "formatR", "gam", "genefilter",
-  "ggplot2", "ggrepel", "gridExtra", "HistData", "kernlab", "knitr", "Lahman", "lpSolve", "lubridate", "MASS", "matrixStats", "mvtnorm", "naivebayes", "parallel", "pdftools", "purrr",
-  "randomForest", "ranger", "Rborist", "RColorBrewer", "recommenderlab", "recosystem", "reshape2", "ROSE", "rpart", "rpart.plot", "rtweet", "rvest", "scales", "snow", "stringr", "svMisc",
-  "textdata", "tibble", "tidyr", "tidytext", "tidyverse", "tree")
+Packages <- c("bigmemory", "bigstatsr", "broom", "caret", "compiler", "caTools", "data.table", "doParallel", "doSNOW", "dplyr", "dslabs", "e1071", "fastAdaboost", "foreach", "formatR",
+  "future", "gam", "genefilter", "ggplot2", "ggrepel", "gridExtra", "HistData", "ipc", "kernlab", "knitr", "Lahman", "lpSolve", "lubridate", "MASS", "matrixStats", "mvtnorm",
+  "naivebayes", "parallel", "pdftools", "promises", "purrr", "randomForest", "ranger", "Rborist", "RColorBrewer", "recommenderlab", "recosystem", "reshape2", "rlist", "ROSE",
+  "rpart", "rpart.plot", "rtweet", "rvest", "scales", "snow", "stringr", "svMisc", "svSocket", "textdata", "tibble", "tidyr", "tidytext", "tidyverse", "tree", "zoo")
+
 
 # Download and install any packages not already installed and then load them.
 

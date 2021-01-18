@@ -3,7 +3,6 @@ title: |
   <center> A Memory-Based Recommendation System: </center>
    <center> My Netflix Prize Derivative Model </center>
 author: "David Augustine"
-date: "10/18/2020"
 output:
   html_document:
     df_print: kable
@@ -101,7 +100,7 @@ continuity to the presentation in this report.
 
 ## Initialization
 
-Before working with any data, we must first initialize our work environment 
+Before working with any data, we must first initialize our work environment
 within R by loading several different packages and defining multiple objects 
 to be used throughout the subsequent steps. We do this by executing the 
 following code (note that not all packages loaded are used for this project; 
@@ -112,55 +111,47 @@ R).
 
 # Step0_Initialize #
 
-# Define names of packages to load for scripts. Not all are actually 
-# necessary.
+# Define names of packages to load for scripts. Not all are actually necessary.
 
-Packages <- c("bigmemory", "broom", "caret", "compiler", "caTools", 
-  "data.table", "doParallel", "dplyr", "dslabs", "e1071", "fastAdaboost", 
-  "foreach", "formatR", "gam", "genefilter", "ggplot2", "ggrepel",
-  "gridExtra", "HistData", "kernlab", "knitr", "Lahman", "lpSolve", 
-  "lubridate", "MASS", "matrixStats", "mvtnorm", "naivebayes", "parallel", 
-  "pdftools", "purrr", "randomForest", "ranger", "Rborist", "RColorBrewer", 
-  "recommenderlab", "recosystem", "reshape2", "ROSE", "rpart", "rpart.plot", 
-  "rtweet", "rvest", "scales", "snow", "stringr", "svMisc", "textdata", 
-  "tibble", "tidyr", "tidytext", "tidyverse", "tree")
+Packages <- c("bigmemory", "bigstatsr", "broom", "caret", "compiler", "caTools", "data.table",
+  "doParallel", "doSNOW", "dplyr", "dslabs", "e1071", "fastAdaboost", "foreach", "formatR", "future",
+  "gam", "genefilter", "ggplot2", "ggrepel", "gridExtra", "HistData", "kernlab", "knitr", "Lahman",
+  "lpSolve", "lubridate", "MASS", "matrixStats", "mvtnorm", "naivebayes", "parallel", "pdftools",
+  "promises", "purrr", "randomForest", "ranger", "Rborist", "RColorBrewer", "recommenderlab",
+  "recosystem", "reshape2", "rlist", "ROSE", "rpart", "rpart.plot", "rtweet", "rvest", "scales",
+  "snow", "stringr", "svMisc", "svSocket", "textdata", "tibble", "tidyr", "tidytext", "tidyverse",
+  "tree", "zoo")
 
-# Download and install any packages not already installed and then load 
-# them.
+# Download and install any packages not already installed and then load them.
 
 for(p in Packages){
-  if(!require(p, character.only = TRUE)){install.packages(p, 
-    character.only = TRUE, repos = "http://cran.us.r-project.org")}
+  if(!require(p, character.only = TRUE)){install.packages(p, character.only = TRUE,
+    repos = "http://cran.us.r-project.org")}
   library(p, character.only = TRUE)
 }
 
-# Define a function that allows easy viewing of multiple figures 
-# simultaneously.
+# Define a function that allows easy viewing of multiple figures simultaneously.
 
 Show <- function(v){
   dev.new(noRStudioGD = TRUE)
   print(v)
 }
 
-# Define a function that prints a progress bar for time-consuming 
-# calculations.
+# Define a function that prints a progress bar for time-consuming calculations.
 
 ProgressBar <- function(i){
-  cat("     Progress: [", strrep(c("|", " "), c(i, 100 - i)), "] ", 
-    ifelse(i != 100, paste(i, "%"), "Done!"), "\r", 
-    if(i == 100){c("\n", "\n")}, sep  = "")
+  cat("     Progress: [", strrep(c("|", " "), c(i, 100 - i)), "] ",
+    ifelse(i != 100, paste(i, "%"), "Done!"), "\r", if(i == 100){c("\n", "\n")}, sep  = "")
   flush.console()
 }
 
-# Define a function that assigns a global scope to its input argument (to 
-# be used when utilizing parallel processing to speed up certain 
-# calculations).
+# Define a function that assigns a global scope to its input argument (to be used when utilizing
+# parallel processing to speed up certain calculations).
 
 make_global <- function(task_arg){arg <<- task_arg}
 
-# Assign the number of logical processors to be used for parallel 
-# processing. For my computer, this is 20. The parallel processing code in 
-# this project is therefore based on this value.
+# Assign the number of logical processors to be used for parallel processing. For my computer, this
+# is 20. The parallel processing code in this project is therefore based on this value.
 
 logical_CPUs <- detectCores(logical = TRUE)
 
@@ -187,41 +178,37 @@ altered in any meaningful way.
 
 # Step1_RetrieveData #
 
-# This is the script provided in the course to generate the edx and 
-# validation datasets, with an additional line of code added at the very 
-# end.
+# This is the script provided in the course to generate the edx and validation datasets, with an
+# additional line of code added at the very end.
 
 dl <- tempfile() 
 
 download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
 
-ratings <- fread(text = gsub("::", "\t", 
-  readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+ratings <- fread(text = gsub("::", "\t", readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
   col.names = c("userId", "movieId", "rating", "timestamp"))
 
-movies <- str_split_fixed(readLines(
-  unzip(dl, "ml-10M100K/movies.dat")), "\\::", 3)
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), "\\::", 3)
 
 colnames(movies) <- c("movieId", "title", "genres")
 
-movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId), 
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId),
   title = as.character(title), genres = as.character(genres))
 
 movielens <- left_join(ratings, movies, by = "movieId")
 
 set.seed(1, sample.kind = "Rounding")
 
-test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, 
-  list = FALSE)
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
 
 edx <- movielens[-test_index, ]
 
 temp <- movielens[test_index, ]
 
-validation <- temp %>% semi_join(edx, by = "movieId") %>% 
-  semi_join(edx, by = "userId")
+validation <- temp %>% semi_join(edx, by = "movieId") %>% semi_join(edx, by = "userId")
 
 removed <- anti_join(temp, validation)
+
 edx <- rbind(edx, removed)
 
 rm(dl, ratings, movies, movielens, test_index, temp, removed)
@@ -286,94 +273,77 @@ home directory.
 
 # Step2_ManipulateData #
 
-# Define the rating_year and release_year variables in both the edx and 
-# validation datasets.
+# Define the rating_year and release_year variables in both the edx and validation datasets.
 
-edx <- edx %>% 
-  mutate(rating_year = year(as_date(as_datetime(timestamp)))) %>%
-  extract(title, c("title", "release_year"), "^(.*)\\s\\((\\d{4})\\)$") %>% 
-  dplyr::select(-timestamp)
+edx <- edx %>% mutate(rating_year = year(as_date(as_datetime(timestamp)))) %>%
+  extract(title, c("title", "release_year"), "^(.*)\\s\\((\\d{4})\\)$") %>% dplyr::select(-timestamp)
 
-validation <- validation %>% 
-  mutate(rating_year = year(as_date(as_datetime(timestamp)))) %>%
-  extract(title, c("title", "release_year"), "^(.*)\\s\\((\\d{4})\\)$") %>% 
-  dplyr::select(-timestamp)
+validation <- validation %>% mutate(rating_year = year(as_date(as_datetime(timestamp)))) %>%
+  extract(title, c("title", "release_year"), "^(.*)\\s\\((\\d{4})\\)$") %>% dplyr::select(-timestamp)
 
-# Define a vector containing the unique genre combination values from the 
-# genres field.
+# Define a vector containing the unique genre combination values from the genres field.
 
 edx.UniqueGenreCombos <- unique(edx$genres)
 
-# Define a vector containing the unique individual genres extracted from the 
-# various combinations of the genres field. Note that those values of the 
-# genres field that are empty strings or "(no genres listed)" have been 
-# ignored.
+# Define a vector containing the unique individual genres extracted from the various combinations of
+# the genres field. Note that those values of the genres field that are empty strings or "(no genres
+# listed)" have been ignored.
 
-edx.UniqueGenres <- str_split(edx.UniqueGenreCombos, "\\|{1}", 
-  simplify = TRUE) %>% as.vector() %>%
-  unique() %>% as_tibble() %>% 
-  filter(value != "" & value != "(no genres listed)") %>% .$value %>% sort()
+edx.UniqueGenres <- str_split(edx.UniqueGenreCombos, "\\|{1}", simplify = TRUE) %>% as.vector() %>%
+  unique() %>% as_tibble() %>% filter(value != "" & value != "(no genres listed)") %>% .$value %>%
+  sort()
 
-# Define a function to assign columns of 1s and 0s to each row of its input 
-# dataset, with each column corresponding to one of the unique genres 
-# listed in edx.UniqueGenres. A 1 in a given column indicates that row's 
-# value for the genres field includes the unique genre corresponding to 
-# that column.
+# Define a function to assign columns of 1s and 0s to each row of its input dataset, with each column
+# corresponding to one of the unique genres listed in edx.UniqueGenres. A 1 in a given column
+# indicates that row's value for the genres field includes the unique genre corresponding to that
+# column.
 
 DefineGenreBernoullis <- function(){
   output <- matrix(nrow = length(arg), ncol = length(edx.UniqueGenres))
   r <- 1
   for(x in arg){
     output[r, ] <- ifelse(str_detect(x, edx.UniqueGenres), 1, 0)
-    if(r < 0.995*length(arg) + 1){ProgressBar(round(100*(r/length(arg)), 
-      0))}
+    if(r < 0.995*length(arg) + 1){ProgressBar(round(100*(r/length(arg)), 0))}
     r <- r + 1
   }
   return(output)
 }
 
-# Define a list with 19 components. Each component will be processed 
-# simultaneously and independently by its own logical processor.
+# Define a list with 19 components. Each component will be processed simultaneously and independently
+# by its own logical processor.
 
 edx.UniqueGenres.Chunks <- vector("list", length = 19)
 
-# Assign chunks of rows of the genres field to the components of the above 
-# defined list.
+# Assign chunks of rows of the genres field to the components of the above defined list.
 
 for(j in 1:19){
-  edx.UniqueGenres.Chunks[[j]] <- edx$genres %>%
-    .[((j - 1)*500000 + 1):pmin(j*500000, nrow(edx))]
+  edx.UniqueGenres.Chunks[[j]] <- edx$genres %>% .[((j - 1)*500000 + 1):pmin(j*500000, nrow(edx))]
 }
 
-# Define the cluster object to be referenced to utilize parallel processing 
-# when applying the DefineGenreBernoullis function.
+# Define the cluster object to be referenced to utilize parallel processing when applying the
+# DefineGenreBernoullis function.
 
 DefineGenreBernoullis.cluster <- makeCluster(logical_CPUs - 1)
 
 registerDoParallel(cl = DefineGenreBernoullis.cluster)
 
-# Make each of the chunks defined above global in scope across all R 
-# sessions. This therefore makes these chunks global in scope within each of 
-# the worker R sessions created for parallel processing.
+# Make each of the chunks defined above global in scope across all R sessions. This therefore makes
+# these chunks global in scope within each of the worker R sessions created for parallel processing.
 
-invisible(clusterApply(cl = DefineGenreBernoullis.cluster, 
-  edx.UniqueGenres.Chunks, make_global))
+invisible(clusterApply(cl = DefineGenreBernoullis.cluster, edx.UniqueGenres.Chunks, make_global))
 
-# Export the "ProgressBar", "str_detect" and "edx.UniqueGenres" objects to 
-# each of the worker R sessions so the DefineGenreBernoullis function can be 
-# properly called within each worker R session.
+# Export the "ProgressBar", "str_detect" and "edx.UniqueGenres" objects to each of the worker R
+# sessions so the DefineGenreBernoullis function can be properly called within each worker R session.
 
-clusterExport(cl = DefineGenreBernoullis.cluster, 
-  c("ProgressBar", "str_detect", "edx.UniqueGenres"))
+clusterExport(cl = DefineGenreBernoullis.cluster, c("ProgressBar", "str_detect", "edx.UniqueGenres"))
 
-# Define a matrix containing the output of the DefineGenreBernoullis 
+# Define a matrix containing the output of the DefineGenreBernoullis function.
+
+edx.GenreBernoullis <- clusterCall(cl = DefineGenreBernoullis.cluster, DefineGenreBernoullis) %>%
+  as.matrix() %>% do.call("rbind", .)
+
+# Close the cluster defined to utilize parallel processing when applying the DefineGenreBernoullis
 # function.
-
-edx.GenreBernoullis <- clusterCall(cl = DefineGenreBernoullis.cluster, 
-  DefineGenreBernoullis) %>% as.matrix() %>% do.call("rbind", .)
-
-# Close the cluster defined to utilize parallel processing when applying the 
-# DefineGenreBernoullis function.
 
 stopCluster(DefineGenreBernoullis.cluster)
 
@@ -381,49 +351,41 @@ stopCluster(DefineGenreBernoullis.cluster)
 
 colnames(edx.GenreBernoullis) <- paste(edx.UniqueGenres, "Ind", sep = ".")
 
-# Define the movie_age, rating_age and rating_lapse variables in the edx 
-# dataset. These variables represent, respectively, the age of each movie as 
-# of 2009, the age of each rating as of 2009, and the number of years passed 
-# between the release year of each movie and the years in which each of its 
-# ratings were submitted.
+# Define the movie_age, rating_age and rating_lapse variables in the edx dataset. These variables
+# represent, respectively, the age of each movie as of 2009, the age of each rating as of 2009, and
+# the number of years passed between the release year of each movie and the years in which each of
+# its ratings were submitted.
 
-edx <- edx %>% mutate(release_year = as.numeric(release_year), 
-  movie_age = pmax(0, 2009 - release_year),
-  rating_age = pmax(0, 2009 - rating_year), 
-  rating_lapse = pmax(0, rating_year - release_year)) %>%
+edx <- edx %>%
+  mutate(release_year = as.numeric(release_year), movie_age = pmax(0, 2009 - release_year),
+  rating_age = pmax(0, 2009 - rating_year), rating_lapse = pmax(0, rating_year - release_year)) %>%
   dplyr::select(!c(release_year, rating_year))
 
-# Append the genre Bernoulli variables to the edx dataset and reorder its 
-# columns.
+# Append the genre Bernoulli variables to the edx dataset and reorder its columns.
 
 edx <- cbind(edx, edx.GenreBernoullis) %>% .[, c(1, 3, 7:8, 2, 4, 6:5, 9:27)]
 
-# The below lines of code repeat the above process of adding and reordering 
-# the columns, but now for the validation dataset. Note that because this 
-# dataset is smaller, no parallel processing is used when applying the 
-# DefineGenreBernoullis function.
+# The below lines of code repeat the above process of adding and reordering the columns, but now for
+# the validation dataset. Note that because this dataset is smaller, no parallel processing is used
+# when applying the DefineGenreBernoullis function.
 
-validation.GenreBernoullis <- matrix(nrow = nrow(validation), 
-  ncol = length(edx.UniqueGenres))
+validation.GenreBernoullis <- matrix(nrow = nrow(validation), ncol = length(edx.UniqueGenres))
 
 arg <- validation$genres
 
 validation.GenreBernoullis <- DefineGenreBernoullis()
 
-colnames(validation.GenreBernoullis) <- paste(edx.UniqueGenres, 
-  "Ind", sep = ".")
+colnames(validation.GenreBernoullis) <- paste(edx.UniqueGenres, "Ind", sep = ".")
 
-validation <- validation %>% mutate(release_year = as.numeric(release_year),
-  movie_age = pmax(0, 2009 - release_year), 
-  rating_age = pmax(0, 2009 - rating_year),
-  rating_lapse = pmax(0, rating_year - release_year)) %>% 
+validation <- validation %>%
+  mutate(release_year = as.numeric(release_year), movie_age = pmax(0, 2009 - release_year), 
+  rating_age = pmax(0, 2009 - rating_year), rating_lapse = pmax(0, rating_year - release_year)) %>% 
   dplyr::select(!c(release_year, rating_year))
 
-validation <- cbind(validation, validation.GenreBernoullis) %>% 
-  .[, c(1, 3, 7:8, 2, 4, 6:5, 9:27)]
+validation <- cbind(validation, validation.GenreBernoullis) %>% .[, c(1, 3, 7:8, 2, 4, 6:5, 9:27)]
 
-# Create the "Data" and "Data/R Data" folders if they don't already exist 
-# in the project's home directory.
+# Create the "Data" and "Data/R Data" folders if they don't already exist in the project's home
+# directory.
 
 if(!dir.exists("Data")){dir.create("Data")}
 
@@ -435,9 +397,8 @@ save(edx, file = "Data/R Data/edx.rda")
 
 save(validation, file = "Data/R Data/validation.rda")
 
-rm(edx.GenreBernoullis, edx.UniqueGenres.Chunks, validation.GenreBernoullis, 
-   edx.UniqueGenreCombos, edx.UniqueGenres, arg, 
-   DefineGenreBernoullis.cluster, j)
+rm(edx.GenreBernoullis, edx.UniqueGenres.Chunks, validation.GenreBernoullis, edx.UniqueGenreCombos,
+   edx.UniqueGenres, arg, DefineGenreBernoullis.cluster, j)
 
 ```
 
@@ -456,23 +417,20 @@ appropriate model specification for our recommendation system.
 
 # Step3_AnalyzeData #
 
-# If the edx and validation datasets aren't already loaded in the R session, 
-# load them.
+# If the edx and validation datasets aren't already loaded in the R session, load them.
 
 if(!exists("edx")){load("Data/R Data/edx.rda")}
 
 if(!exists("validation")){load("Data/R Data/validation.rda")}
 
-# Create the "Figures" folder if it doesn't already exist in the project's
-# home directory.
+# Create the "Figures" folder if it doesn't already exist in the project's home directory.
 
 if(!dir.exists("Figures")){dir.create("Figures")}
 
 # Variable Importance metrics and figures:
 
-# Define different sets of indices to be used to define different chunks of 
-# the edx dataset. Each chunk will correspond to a different worker R 
-# session in the parallel processing to follow.
+# Define different sets of indices to be used to define different chunks of the edx dataset. Each
+# chunk will correspond to a different worker R session in the parallel processing to follow.
 
 set.seed(2020, sample.kind  = "Rounding")
 
@@ -480,36 +438,31 @@ edx.partition.indices <- createFolds(edx$rating, k = logical_CPUs)
 
 # Define the different chunks of the edx dataset.
 
-chunks <- lapply(edx.partition.indices, 
-  function(data, indices){data[indices, ]}, data = edx)
+chunks <- lapply(edx.partition.indices, function(data, indices){data[indices, ]}, data = edx)
 
-# Define the RunRandomForest function to be applied to each chunk of the 
-# edx dataset.
+# Define the RunRandomForest function to be applied to each chunk of the edx dataset.
 
 RunRandomForest <- function(tree_num){
-  arg <- arg %>% mutate(movieId = as.factor(movieId),
-    userId = as.factor(userId), genres = as.factor(genres))
-  ranger(rating ~ movieId + userId + genres + rating_lapse + movie_age +
-    rating_age, data = arg, num.trees = tree_num, importance = "impurity",
-    respect.unordered.factors = TRUE)
+  arg <- arg %>% mutate(movieId = as.factor(movieId), userId = as.factor(userId),
+    genres = as.factor(genres))
+  ranger(rating ~ movieId + userId + genres + rating_lapse + movie_age + rating_age, data = arg,
+    num.trees = tree_num, importance = "impurity", respect.unordered.factors = TRUE)
 }
 
-# Define the cluster object to be referenced to utilize parallel processing 
-# when applying the RunRandomForest function.
+# Define the cluster object to be referenced to utilize parallel processing when applying the
+# RunRandomForest function.
 
 RunRandomForest.cluster <- makeCluster(logical_CPUs)
 
 registerDoParallel(cl = RunRandomForest.cluster)
 
-# Make each of the chunks defined above global in scope across all R 
-# sessions. This therefore makes these chunks global in scope within each 
-# of the worker R sessions created for parallel processing.
+# Make each of the chunks defined above global in scope across all R sessions. This therefore makes
+# these chunks global in scope within each of the worker R sessions created for parallel processing.
 
 invisible(clusterApply(cl = RunRandomForest.cluster, chunks, make_global))
 
-# Export the "ranger", "%>%" and "mutate" objects to each of the worker R
-# sessions so the RunRandomForest function can be properly called within 
-# each worker R session.
+# Export the "ranger", "%>%" and "mutate" objects to each of the worker R sessions so the
+# RunRandomForest function can be properly called within each worker R session.
 
 clusterExport(cl = RunRandomForest.cluster, c("ranger", "%>%", "mutate"))
 
@@ -517,23 +470,21 @@ clusterExport(cl = RunRandomForest.cluster, c("ranger", "%>%", "mutate"))
 
 set.seed(2020, sample.kind  = "Rounding")
 
-edx.RandomForest <- clusterCall(cl = RunRandomForest.cluster, 
-  RunRandomForest, tree_num = 100)
+edx.RandomForest <- clusterCall(cl = RunRandomForest.cluster, RunRandomForest, tree_num = 100)
 
-# Close the cluster defined to utilize parallel processing when applying 
-# the RunRandomForest function.
+# Close the cluster defined to utilize parallel processing when applying the RunRandomForest
+# function.
 
 stopCluster(RunRandomForest.cluster)
 
-# Define the VariableImpsByChunk matrix containing the variable importances 
-# of the different variables for each chunk of the edx dataset.
+# Define the VariableImpsByChunk matrix containing the variable importances of the different
+# variables for each chunk of the edx dataset.
 
 for(j in 1:20){
   if(j == 1){
     VariableImpsByChunk <-  edx.RandomForest[[j]]$variable.importance
   }else{
-    VariableImpsByChunk <- cbind(VariableImpsByChunk, 
-      edx.RandomForest[[j]]$variable.importance)
+    VariableImpsByChunk <- cbind(VariableImpsByChunk, edx.RandomForest[[j]]$variable.importance)
   }
 }
 
@@ -541,8 +492,7 @@ for(j in 1:20){
 
 colnames(VariableImpsByChunk) <- paste("var.imp", seq(1:20), sep = "_")
 
-# Define a sorted vector of average variable importances for the different 
-# variables.
+# Define a sorted vector of average variable importances for the different variables.
 
 VariableImps <- rowMeans(VariableImpsByChunk) %>% sort(decreasing = TRUE)
 
@@ -550,72 +500,58 @@ VariableImps <- rowMeans(VariableImpsByChunk) %>% sort(decreasing = TRUE)
 
 # Define a dataset consisting of the frequency of each rating.
 
-Ratings.Distribution <- edx %>% group_by(rating) %>% 
-  summarize(Count = n(), .groups = "drop")
+Ratings.Distribution <- edx %>% group_by(rating) %>% summarize(Count = n(), .groups = "drop")
 
 # Define, show and save a histogram showing the frequency of each rating.
 
-Ratings.Histogram <- Ratings.Distribution %>% 
-  mutate(rating = factor(rating)) %>% ggplot(aes(rating, Count)) +
-  geom_col(fill = "cornflowerblue", color = "white") + 
+Ratings.Histogram <- Ratings.Distribution %>% mutate(rating = factor(rating)) %>%
+  ggplot(aes(rating, Count)) + geom_col(fill = "cornflowerblue", color = "white") + 
   labs(x = "Rating", y = "Count", title = "Distribution of Ratings") + 
-  geom_vline(aes(xintercept = 7.02), color = "red") +
-  annotate("text", x = 6.75, y = 2.25*10^6,
+  geom_vline(aes(xintercept = 7.02), color = "red") + annotate("text", x = 6.75, y = 2.25*10^6,
   label = round(sum(Ratings.Distribution$rating*Ratings.Distribution$Count)/
-  sum(Ratings.Distribution$Count), 2), color = "red", size = 3) + 
-  ggthemes::theme_economist() + theme(plot.title = element_text(hjust = 0.5))
+  sum(Ratings.Distribution$Count), 2), color = "red", size = 3) + ggthemes::theme_economist() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 Show(Ratings.Histogram)
 
-ggsave(filename = "Ratings_Histogram.png", plot = Ratings.Histogram, 
-  path = "Figures")
+ggsave(filename = "Ratings_Histogram.png", plot = Ratings.Histogram, path = "Figures")
 
 # Metrics and figures by movie:
 
-# Define a dataset consisting of the frequency, average rating and rating 
-# standard deviation for each movie.
+# Define a dataset consisting of the frequency, average rating and rating standard deviation for each
+# movie.
 
-Ratings_by_Movie.Distribution <- edx %>% group_by(movieId) %>% 
-  summarize(Count = n(), Mu_gvn_Movie = mean(rating), 
-  Sd_gvn_Movie = sd(rating), .groups = "drop")
+Ratings_by_Movie.Distribution <- edx %>% group_by(movieId) %>% summarize(Count = n(),
+  Mu_gvn_Movie = mean(rating), Sd_gvn_Movie = sd(rating), .groups = "drop")
 
-# Define, show and save a histogram showing the distribution of rating 
-# counts by movie.
+# Define, show and save a histogram showing the distribution of rating counts by movie.
 
-Ratings_by_Movie.Counts.Histogram <- Ratings_by_Movie.Distribution %>% 
-  ggplot(aes(Count)) + geom_histogram(fill = "cornflowerblue", 
-  color = "white") + labs(title = "Distribution of Movie Rating Counts", 
-  x = "Movie Rating Count", y = "Movie Count") +
-  geom_vline(aes(xintercept = mean(Count)), color = "red") + 
-  annotate("text", x = 1200, y = 550,
-  label = round(mean(Ratings_by_Movie.Distribution$Count), 0), 
-  color = "red", size = 3) + scale_y_continuous(limits = c(-1, 801)) + 
-  scale_x_log10() + ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10), 
-  axis.title.y = element_text(size = 10), 
-  plot.title = element_text(size = 12, hjust = 0.5),
-  legend.position = "none")
+Ratings_by_Movie.Counts.Histogram <- Ratings_by_Movie.Distribution %>% ggplot(aes(Count)) +
+  geom_histogram(fill = "cornflowerblue", color = "white") +
+  labs(title = "Distribution of Movie Rating Counts", x = "Movie Rating Count", y = "Movie Count") +
+  geom_vline(aes(xintercept = mean(Count)), color = "red") + annotate("text", x = 1200, y = 550,
+  label = round(mean(Ratings_by_Movie.Distribution$Count), 0), color = "red", size = 3) +
+  scale_y_continuous(limits = c(-1, 801)) + scale_x_log10() + ggthemes::theme_economist() +
+  theme(axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10), 
+  plot.title = element_text(size = 12, hjust = 0.5), legend.position = "none")
 
 Show(Ratings_by_Movie.Counts.Histogram)
 
-ggsave(filename = "Ratings_by_Movie_Counts_Histogram.png", 
+ggsave(filename = "Ratings_by_Movie_Counts_Histogram.png",
   plot = Ratings_by_Movie.Counts.Histogram, path = "Figures")
 
-# Define, show and save a density plot showing the distributions of rating 
-# standard deviations by movie, with one density corresponding to those 
-# movies with at most the median number of ratings per movie, and the other 
-# corresponding to those movies with more than the median number of ratings 
-# per movie.
+# Define, show and save a density plot showing the distributions of rating standard deviations by
+# movie, with one density corresponding to those movies with at most the median number of ratings per
+# movie, and the other corresponding to those movies with more than the median number of ratings per
+# movie.
 
 Ratings_by_Movie.StDevs.Density <- Ratings_by_Movie.Distribution %>% 
   mutate(Partition = cut(Count, breaks = c(-Inf, median(Count), Inf), 
   labels = c("Rating Count <= 122", "Rating Count > 122"))) %>%
   ggplot(aes(Sd_gvn_Movie, fill = Partition)) + geom_density(alpha = 0.5) +
   labs(title = "Density of Rating Standard Deviation - By Movie Group", 
-  x = "Rating Standard Deviation", y = "Density") +
-  ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10), 
-  axis.title.y = element_text(size = 10),
+  x = "Rating Standard Deviation", y = "Density") + ggthemes::theme_economist() +
+  theme(axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10),
   plot.title = element_text(size = 12, hjust = 0.5))
 
 Show(Ratings_by_Movie.StDevs.Density)
@@ -623,23 +559,17 @@ Show(Ratings_by_Movie.StDevs.Density)
 ggsave(filename = "Ratings_by_Movie_StDevs_Density.png", 
   plot = Ratings_by_Movie.StDevs.Density, path = "Figures")
 
-# Define, show and save a scatterplot showing rating counts against rating 
-# averages by movie, including a smoothed trend line with a confidence 
-# interval.
+# Define, show and save a scatterplot showing rating counts against rating averages by movie,
+# including a smoothed trend line with a confidence interval.
 
-Ratings_by_Movie.Counts_vs_Avgs.Scatterplot <- 
-  Ratings_by_Movie.Distribution %>% ggplot(aes(Count, Mu_gvn_Movie)) +
-  geom_point(color = "cornflowerblue", alpha = 0.3) + geom_smooth() +
-  labs(title = "Scatterplot of Movie Rating Count vs Average Rating", 
-  x = "Movie Rating Count", y = "Average Rating") + 
-  geom_vline(aes(xintercept = mean(Count)), color = "red") +
-  annotate("text", x = 2000, y = 5, 
-  label = round(mean(Ratings_by_Movie.Distribution$Count), 0),
-  color = "red", size = 3) +
-  ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10),
-  axis.title.y = element_text(size = 10), 
-  plot.title = element_text(size = 12, hjust = 0.5))
+Ratings_by_Movie.Counts_vs_Avgs.Scatterplot <- Ratings_by_Movie.Distribution %>%
+  ggplot(aes(Count, Mu_gvn_Movie)) + geom_point(color = "cornflowerblue", alpha = 0.3) +
+  geom_smooth() + labs(title = "Scatterplot of Movie Rating Count vs Average Rating", 
+  x = "Movie Rating Count", y = "Average Rating") + geom_vline(aes(xintercept = mean(Count)),
+  color = "red") + annotate("text", x = 2000, y = 5, 
+  label = round(mean(Ratings_by_Movie.Distribution$Count), 0), color = "red", size = 3) +
+  ggthemes::theme_economist() + theme(axis.title.x = element_text(size = 10),
+  axis.title.y = element_text(size = 10), plot.title = element_text(size = 12, hjust = 0.5))
 
 Show(Ratings_by_Movie.Counts_vs_Avgs.Scatterplot)
 
@@ -648,50 +578,40 @@ ggsave(filename = "Ratings_by_Movie_Counts_vs_Avgs_Scatterplot.png",
 
 # Metrics and figures by user:
 
-# Define a dataset consisting of the frequency, average rating and rating 
-# standard deviation for each user.
+# Define a dataset consisting of the frequency, average rating and rating standard deviation for each
+# user.
 
-Ratings_by_User.Distribution <- edx %>% group_by(userId) %>% 
-  summarize(Count = n(), Mu_gvn_User = mean(rating), 
-  Sd_gvn_User = sd(rating), .groups = "drop")
+Ratings_by_User.Distribution <- edx %>% group_by(userId) %>%
+  summarize(Count = n(), Mu_gvn_User = mean(rating), Sd_gvn_User = sd(rating), .groups = "drop")
 
-# Define, show and save a histogram showing the distribution of rating 
-# counts by user.
+# Define, show and save a histogram showing the distribution of rating counts by user.
 
-Ratings_by_User.Counts.Histogram <- Ratings_by_User.Distribution %>% 
-  ggplot(aes(Count)) + geom_histogram(fill = "cornflowerblue", 
-  color = "white") + labs(title = "Distribution of User Rating Counts", 
-  x = "User Rating Count", y = "User Count") +
-  geom_vline(aes(xintercept = mean(Count)), color = "red") + 
-  annotate("text", x = 175, y = 6000,
-  label = round(mean(Ratings_by_User.Distribution$Count), 0), color = "red", 
-  size = 3) + scale_y_continuous(limits = c(-1, 8001)) + 
-  scale_x_log10() + ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10), 
-  axis.title.y = element_text(size = 10),
-  plot.title = element_text(size = 12, hjust = 0.5), 
-  legend.position = "none")
+Ratings_by_User.Counts.Histogram <- Ratings_by_User.Distribution %>% ggplot(aes(Count)) +
+  geom_histogram(fill = "cornflowerblue", color = "white") +
+  labs(title = "Distribution of User Rating Counts", x = "User Rating Count", y = "User Count") +
+  geom_vline(aes(xintercept = mean(Count)), color = "red") + annotate("text", x = 175, y = 6000,
+  label = round(mean(Ratings_by_User.Distribution$Count), 0), color = "red", size = 3) +
+  scale_y_continuous(limits = c(-1, 8001)) + scale_x_log10() + ggthemes::theme_economist() +
+  theme(axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10),
+  plot.title = element_text(size = 12, hjust = 0.5), legend.position = "none")
 
 Show(Ratings_by_User.Counts.Histogram)
 
 ggsave(filename = "Ratings_by_User_Counts_Histogram.png", 
   plot = Ratings_by_User.Counts.Histogram, path = "Figures")
 
-# Define, show and save a density plot showing the distributions of rating 
-# standard deviations by user, with one density corresponding to those 
-# users with at most the median number of ratings per user, and the other
-# corresponding to those users with more than the median number of ratings 
-# per user.
+# Define, show and save a density plot showing the distributions of rating standard deviations by
+# user, with one density corresponding to those users with at most the median number of ratings per
+# user, and the other corresponding to those users with more than the median number of ratings per
+# user.
 
 Ratings_by_User.StDevs.Density <- Ratings_by_User.Distribution %>% 
   mutate(Partition = cut(Count, breaks = c(-Inf, median(Count), Inf), 
   labels = c("Rating Count <= 62", "Rating Count > 62"))) %>%
   ggplot(aes(Sd_gvn_User, fill = Partition)) + geom_density(alpha = 0.5) +
   labs(title = "Density of Rating Standard Deviation - By User Group", 
-  x = "Rating Standard Deviation", y = "Density") + 
-  ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10), 
-  axis.title.y = element_text(size = 10),
+  x = "Rating Standard Deviation", y = "Density") + ggthemes::theme_economist() +
+  theme(axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10),
   plot.title = element_text(size = 12, hjust = 0.5))
 
 Show(Ratings_by_User.StDevs.Density)
@@ -699,22 +619,17 @@ Show(Ratings_by_User.StDevs.Density)
 ggsave(filename = "Ratings_by_User_StDevs_Density.png", 
   plot = Ratings_by_User.StDevs.Density, path = "Figures")
 
-# Define, show and save a scatterplot showing rating counts against rating 
-# averages by user, including a smoothed trend line with a confidence 
-# interval.
+# Define, show and save a scatterplot showing rating counts against rating averages by user,
+# including a smoothed trend line with a confidence interval.
 
-Ratings_by_User.Counts_vs_Avgs.Scatterplot <- 
-  Ratings_by_User.Distribution %>% ggplot(aes(Count, Mu_gvn_User)) + 
-  geom_point(color = "cornflowerblue", alpha = 0.3) + geom_smooth() +
-  labs(title = "Scatterplot of User Rating Count vs Average Rating", 
-  x = "User Rating Count", y = "Average Rating") + 
-  geom_vline(aes(xintercept = mean(Count)), color = "red") +
-  annotate("text", x = 400, y = 5, 
-  label = round(mean(Ratings_by_User.Distribution$Count), 0), color = "red",
-  size = 3) + ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10), 
-  axis.title.y = element_text(size = 10),
-  plot.title = element_text(size = 12, hjust = 0.5))
+Ratings_by_User.Counts_vs_Avgs.Scatterplot <- Ratings_by_User.Distribution %>%
+  ggplot(aes(Count, Mu_gvn_User)) + geom_point(color = "cornflowerblue", alpha = 0.3) +
+  geom_smooth() + labs(title = "Scatterplot of User Rating Count vs Average Rating", 
+  x = "User Rating Count", y = "Average Rating") +
+  geom_vline(aes(xintercept = mean(Count)), color = "red") + annotate("text", x = 400, y = 5, 
+  label = round(mean(Ratings_by_User.Distribution$Count), 0), color = "red", size = 3) +
+  ggthemes::theme_economist() + theme(axis.title.x = element_text(size = 10), 
+  axis.title.y = element_text(size = 10), plot.title = element_text(size = 12, hjust = 0.5))
 
 Show(Ratings_by_User.Counts_vs_Avgs.Scatterplot)
 
@@ -723,44 +638,38 @@ ggsave(filename = "Ratings_by_User_Counts_vs_Avgs_Scatterplot.png",
 
 # Metrics and figures by genre:
 
-# Define a dataset consisting of the frequency, average rating and rating 
-# standard deviation for each unique genre.
+# Define a dataset consisting of the frequency, average rating and rating standard deviation for each
+# unique genre.
 
 Ratings_by_Genre.Distribution <- tibble()
 
 for(j in 1:19){
-  temp <- edx %>% 
-    group_by_(paste("`", colnames(edx)[j + 8], "`", sep = "")) %>% 
-    summarize(Count = n(), Mu_gvn_Genre = mean(rating), 
-    Sd_gvn_Genre = sd(rating), .groups = "drop") %>% slice_max(.[, 1]) %>%
-    .[, 2:4] %>% mutate(Genre = colnames(edx)[j + 8]) %>% .[, c(4, 1:3)]
+  temp <- edx %>% group_by_(paste("`", colnames(edx)[j + 8], "`", sep = "")) %>% 
+    summarize(Count = n(), Mu_gvn_Genre = mean(rating), Sd_gvn_Genre = sd(rating),
+    .groups = "drop") %>% slice_max(.[, 1]) %>% .[, 2:4] %>% mutate(Genre = colnames(edx)[j + 8]) %>%
+    .[, c(4, 1:3)]
   if(j == 1){
     Ratings_by_Genre.Distribution <- as.matrix(temp)
   }else{
-    Ratings_by_Genre.Distribution <- 
-      rbind(as.matrix(Ratings_by_Genre.Distribution), temp)
+    Ratings_by_Genre.Distribution <- rbind(as.matrix(Ratings_by_Genre.Distribution), temp)
   }
 }
 
-Ratings_by_Genre.Distribution <- Ratings_by_Genre.Distribution %>% 
-  mutate(Count = as.numeric(Count), Mu_gvn_Genre = as.numeric(Mu_gvn_Genre), 
-  Sd_gvn_Genre = as.numeric(Sd_gvn_Genre))
+Ratings_by_Genre.Distribution <- Ratings_by_Genre.Distribution %>% mutate(Count = as.numeric(Count),
+  Mu_gvn_Genre = as.numeric(Mu_gvn_Genre), Sd_gvn_Genre = as.numeric(Sd_gvn_Genre))
 
-# Define, show and save a scatterplot showing average rating up against 
-# rating standard deviation for each unique genre.
+# Define, show and save a scatterplot showing average rating up against rating standard deviation for
+# each unique genre.
 
 Ratings_by_Genre.Summary.Scatterplot <- Ratings_by_Genre.Distribution %>% 
   ggplot(aes(x = Mu_gvn_Genre, y = Sd_gvn_Genre, label = Genre)) + 
-  geom_point(aes(x = Mu_gvn_Genre, y = Sd_gvn_Genre, size = Count),
-  inherit.aes = FALSE) + geom_point(aes(color = Genre, size = Count), 
-  show.legend = FALSE) + geom_text_repel() + 
+  geom_point(aes(x = Mu_gvn_Genre, y = Sd_gvn_Genre, size = Count), inherit.aes = FALSE) +
+  geom_point(aes(color = Genre, size = Count), show.legend = FALSE) + geom_text_repel() + 
   scale_size_continuous(name = "Count:", breaks = 10^6*c(1, 2, 3),
   labels = c("1*10^6", "2*10^6", "3*10^6")) + labs(title = 
-  "Scatterplot of Average Rating vs Rating Standard Deviation - By Genre", 
-  x = "Average Rating", y = "Rating Standard Deviation") + 
-  ggthemes::theme_economist() + 
-  theme(axis.title.x = element_text(size = 10), 
-  axis.title.y = element_text(size = 10),
+  "Scatterplot of Average Rating vs Rating Standard Deviation - By Genre", x = "Average Rating",
+  y = "Rating Standard Deviation") + ggthemes::theme_economist() + 
+  theme(axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10),
   plot.title = element_text(size = 12, hjust = 0.5))
 
 Show(Ratings_by_Genre.Summary.Scatterplot)
@@ -770,127 +679,94 @@ ggsave(filename = "Ratings_by_Genre_Summary_Scatterplot.png",
 
 # Metrics and figures by rating lapse:
 
-# Define a dataset consisting of the frequency, average rating and rating 
-# standard deviation for each rating_lapse value.
+# Define a dataset consisting of the frequency, average rating and rating standard deviation for each
+# rating_lapse value.
 
-Ratings_by_Rating_Lapse.Distribution <- edx %>% group_by(rating_lapse) %>% 
-  summarize(Count = n(), Mu_gvn_Rating_Lapse = mean(rating), 
-  Sd_gvn_Rating_Lapse = sd(rating), .groups = "drop")
+Ratings_by_Rating_Lapse.Distribution <- edx %>% group_by(rating_lapse) %>% summarize(Count = n(),
+  Mu_gvn_Rating_Lapse = mean(rating), Sd_gvn_Rating_Lapse = sd(rating), .groups = "drop")
 
-# Define, show and save a histogram showing the frequency of each value of 
-# the rating_lapse variable.
+# Define, show and save a histogram showing the frequency of each value of the rating_lapse variable.
 
 Ratings_by_Rating_Lapse.Histogram <- Ratings_by_Rating_Lapse.Distribution %>%
-  ggplot(aes(rating_lapse, Count)) + geom_col(fill = "cornflowerblue",
-  color = "white") + labs(x = "Rating Lapse", y = "Rating Count",
-  title = "Distribution of Rating Lapse") +
-  scale_x_continuous(limits = c(-1, 100)) + scale_y_log10() +
-  ggthemes::theme_economist() + theme(axis.title.x = element_text(size = 10),
-  axis.title.y = element_text(size = 10),
-  plot.title = element_text(size = 12, hjust = 0.5),
-  legend.position = "none")
+  ggplot(aes(rating_lapse, Count)) + geom_col(fill = "cornflowerblue", color = "white") +
+  labs(x = "Rating Lapse", y = "Rating Count", title = "Distribution of Rating Lapse") +
+  scale_x_continuous(limits = c(-1, 100)) + scale_y_log10() + ggthemes::theme_economist() +
+  theme(axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10),
+  plot.title = element_text(size = 12, hjust = 0.5), legend.position = "none")
 
 Show(Ratings_by_Rating_Lapse.Histogram)
 
 ggsave(filename = "Ratings_by_Rating_Lapse_Histogram.png", 
   plot = Ratings_by_Rating_Lapse.Histogram, path = "Figures")
 
-# Define, show and save a scatterplot showing average ratings against 
-# number of years lapsed between movie release and rating, including a 
-# smoothed trend line with a confidence interval.
+# Define, show and save a scatterplot showing average ratings against number of years lapsed between
+# movie release and rating, including a smoothed trend line with a confidence interval.
 
-Ratings_by_Rating_Lapse.Rating_Lapse_vs_Avgs.Scatterplot <- 
-  Ratings_by_Rating_Lapse.Distribution %>%
-  ggplot(aes(rating_lapse, Mu_gvn_Rating_Lapse)) + 
-  geom_point(color = "steelblue4", alpha = 0.3) +
-  geom_smooth() + 
-  labs(title = "Scatterplot of Rating Lapse vs Average Rating", 
-  x = "Rating Lapse", y = "Average Rating") + 
-  ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10), 
-  axis.title.y = element_text(size = 10), 
-  plot.title = element_text(size = 12, hjust = 0.5))
+Ratings_by_Rating_Lapse.Rating_Lapse_vs_Avgs.Scatterplot <- Ratings_by_Rating_Lapse.Distribution %>%
+  ggplot(aes(rating_lapse, Mu_gvn_Rating_Lapse)) + geom_point(color = "steelblue4", alpha = 0.3) +
+  geom_smooth() + labs(title = "Scatterplot of Rating Lapse vs Average Rating", x = "Rating Lapse",
+  y = "Average Rating") + ggthemes::theme_economist() + theme(axis.title.x = element_text(size = 10), 
+  axis.title.y = element_text(size = 10), plot.title = element_text(size = 12, hjust = 0.5))
 
 Show(Ratings_by_Rating_Lapse.Rating_Lapse_vs_Avgs.Scatterplot)
 
-ggsave(filename = 
- "Ratings_by_Rating_Lapse_Rating_Lapse_vs_Avgs_Scatterplot.png",
-  plot = Ratings_by_Rating_Lapse.Rating_Lapse_vs_Avgs.Scatterplot, 
-  path = "Figures")
+ggsave(filename = "Ratings_by_Rating_Lapse_Rating_Lapse_vs_Avgs_Scatterplot.png",
+  plot = Ratings_by_Rating_Lapse.Rating_Lapse_vs_Avgs.Scatterplot, path = "Figures")
 
 # Metrics and figures by movie age:
 
-# Define a dataset consisting of the number of movies, number of ratings, 
-# average rating and rating standard deviation for each movie_age value.
+# Define a dataset consisting of the number of movies, number of ratings, average rating and rating
+# standard deviation for each movie_age value.
 
-Ratings_by_Movie_Age.Distribution <- edx %>% group_by(movie_age) %>% 
-  summarize(Rating_Count = n(), Movie_Count = n_distinct(movieId), 
-  Mu_gvn_Movie_Age = mean(rating), Sd_gvn_Movie_Age = sd(rating),
+Ratings_by_Movie_Age.Distribution <- edx %>% group_by(movie_age) %>% summarize(Rating_Count = n(),
+  Movie_Count = n_distinct(movieId), Mu_gvn_Movie_Age = mean(rating), Sd_gvn_Movie_Age = sd(rating),
   .groups = "drop")
 
-# Define, show and save a histogram showing the number of ratings by movie 
-# age.
+# Define, show and save a histogram showing the number of ratings by movie age.
 
 Ratings_by_Movie_Age.Histogram <- Ratings_by_Movie_Age.Distribution %>%
-  ggplot(aes(movie_age, Rating_Count)) + geom_col(fill = "cornflowerblue",
-  color = "white") + labs(x = "Movie Age", y = "Rating Count",
-  title = "Distribution of Movie Age") +
-  scale_x_continuous(limits = c(-1, 95)) + scale_y_log10() +
-  ggthemes::theme_economist() + theme(axis.title.x = element_text(size = 10),
-  axis.title.y = element_text(size = 10),
-  plot.title = element_text(size = 12, hjust = 0.5),
-  legend.position = "none")
+  ggplot(aes(movie_age, Rating_Count)) + geom_col(fill = "cornflowerblue", color = "white") +
+  labs(x = "Movie Age", y = "Rating Count", title = "Distribution of Movie Age") +
+  scale_x_continuous(limits = c(-1, 95)) + scale_y_log10() + ggthemes::theme_economist() +
+  theme(axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10),
+  plot.title = element_text(size = 12, hjust = 0.5), legend.position = "none")
 
 Show(Ratings_by_Movie_Age.Histogram)
 
 ggsave(filename = "Ratings_by_Movie_Age_Histogram.png", 
   plot = Ratings_by_Movie_Age.Histogram, path = "Figures")
 
-# Define, show and save a scatterplot showing average ratings against 
-# movie age, including a smoothed trend line with a confidence interval.
+# Define, show and save a scatterplot showing average ratings against movie age, including a
+# smoothed trend line with a confidence interval.
 
-Ratings_by_Movie_Age.Movie_Age_vs_Avgs.Scatterplot <- 
-  Ratings_by_Movie_Age.Distribution %>%
-  ggplot(aes(movie_age, Mu_gvn_Movie_Age)) + 
-  geom_point(color = "cornflowerblue", alpha = 0.3) + geom_smooth() + 
-  labs(title = "Scatterplot of Movie Age vs Average Rating", x = "Movie Age",
-  y = "Average Rating") + 
-  ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10),
-  axis.title.y = element_text(size = 10), 
-  plot.title = element_text(size = 12, hjust = 0.5))
+Ratings_by_Movie_Age.Movie_Age_vs_Avgs.Scatterplot <- Ratings_by_Movie_Age.Distribution %>%
+  ggplot(aes(movie_age, Mu_gvn_Movie_Age)) + geom_point(color = "cornflowerblue", alpha = 0.3) +
+  geom_smooth() + labs(title = "Scatterplot of Movie Age vs Average Rating", x = "Movie Age",
+  y = "Average Rating") + ggthemes::theme_economist() + theme(axis.title.x = element_text(size = 10),
+  axis.title.y = element_text(size = 10), plot.title = element_text(size = 12, hjust = 0.5))
 
 Show(Ratings_by_Movie_Age.Movie_Age_vs_Avgs.Scatterplot)
 
 ggsave(filename = "Ratings_by_Movie_Age_Movie_Age_vs_Avgs_Scatterplot.png",
-  plot = Ratings_by_Movie_Age.Movie_Age_vs_Avgs.Scatterplot, 
-  path = "Figures")
+  plot = Ratings_by_Movie_Age.Movie_Age_vs_Avgs.Scatterplot, path = "Figures")
 
 # Metrics and figures by rating age:
 
-# Define a dataset consisting of the frequency, average rating and rating 
-# standard deviation for each rating_age value.
+# Define a dataset consisting of the frequency, average rating and rating standard deviation for each
+# rating_age value.
 
-Ratings_by_Rating_Age.Distribution <- edx %>% group_by(rating_age) %>% 
-  summarize(Count = n(), Mu_gvn_Rating_Age = mean(rating), 
-  Sd_gvn_Rating_Age = sd(rating), .groups = "drop")
+Ratings_by_Rating_Age.Distribution <- edx %>% group_by(rating_age) %>% summarize(Count = n(),
+  Mu_gvn_Rating_Age = mean(rating), Sd_gvn_Rating_Age = sd(rating), .groups = "drop")
 
-# Define, show and save a bar chart showing the average rating by rating 
-# age.
+# Define, show and save a bar chart showing the average rating by rating age.
 
 Ratings_by_Rating_Age.Bar_Chart <- Ratings_by_Rating_Age.Distribution %>%
-  ggplot(aes(rating_age, Mu_gvn_Rating_Age)) + 
-  geom_col(fill = "cornflowerblue", color = "white") +
-  labs(x = "Rating Age", y = "Average Rating", 
-  title = "Average Rating by Rating Age") +
-  geom_hline(aes(yintercept = 3.51), color = "red") + 
-  annotate("text", x = 4, y = 3.7, label = 3.51, color = "red", size = 3) + 
-  scale_x_continuous(limits = c(-1, 15)) + 
-  ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10), 
-  axis.title.y = element_text(size = 10), 
-  plot.title = element_text(size = 12, hjust = 0.5), 
-  legend.position = "none")
+  ggplot(aes(rating_age, Mu_gvn_Rating_Age)) + geom_col(fill = "cornflowerblue", color = "white") +
+  labs(x = "Rating Age", y = "Average Rating", title = "Average Rating by Rating Age") +
+  geom_hline(aes(yintercept = 3.51), color = "red") + annotate("text", x = 4, y = 3.7, label = 3.51,
+  color = "red", size = 3) + scale_x_continuous(limits = c(-1, 15)) + ggthemes::theme_economist() +
+  theme(axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10), 
+  plot.title = element_text(size = 12, hjust = 0.5), legend.position = "none")
 
 Show(Ratings_by_Rating_Age.Bar_Chart)
 
@@ -900,26 +776,20 @@ ggsave(filename = "Ratings_by_Rating_Age_Bar_Chart.png",
 # Define, show and save a histogram showing rating count by rating age.
 
 Ratings_by_Rating_Age.Histogram <- Ratings_by_Rating_Age.Distribution %>% 
-  ggplot(aes(rating_age, Count)) + geom_col(fill = "cornflowerblue", 
-  color = "white") + labs(x = "Rating Age", y = "Rating Count",
-  title = "Distribution of Rating Age") + 
-  geom_hline(aes(yintercept = mean(Count)), color = "red") +
-  annotate("text", x = 6.5, y = 8*10^5, 
-  label = round(mean(Ratings_by_Rating_Age.Distribution$Count), 0),
-  color = "red", size = 3) + scale_x_continuous(limits = c(-1, 15)) + 
-  scale_y_log10() + ggthemes::theme_economist() +
-  theme(axis.title.x = element_text(size = 10), 
-  axis.title.y = element_text(size = 10), 
-  plot.title = element_text(size = 12, hjust = 0.5), 
-  legend.position = "none")
+  ggplot(aes(rating_age, Count)) + geom_col(fill = "cornflowerblue", color = "white") +
+  labs(x = "Rating Age", y = "Rating Count", title = "Distribution of Rating Age") + 
+  geom_hline(aes(yintercept = mean(Count)), color = "red") + annotate("text", x = 6.5, y = 8*10^5, 
+  label = round(mean(Ratings_by_Rating_Age.Distribution$Count), 0), color = "red", size = 3) +
+  scale_x_continuous(limits = c(-1, 15)) + scale_y_log10() + ggthemes::theme_economist() +
+  theme(axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 10), 
+  plot.title = element_text(size = 12, hjust = 0.5), legend.position = "none")
 
 Show(Ratings_by_Rating_Age.Histogram)
 
 ggsave(filename = "Ratings_by_Rating_Age_Histogram.png", 
   plot = Ratings_by_Rating_Age.Histogram, path = "Figures")
 
-rm(logical_CPUs, RunRandomForest.cluster, edx.partition.indices, chunks, j, 
-  temp)
+rm(logical_CPUs, RunRandomForest.cluster, edx.partition.indices, chunks, j, temp)
 
 ```
 
@@ -929,7 +799,7 @@ Before covering any of the variables we may want to include in our predictive
 model for `rating`, we start by showing a histogram of the distribution of
 `ratings` in the `edx` dataset:
 
-```{r message = FALSE, warning = FALSE}
+```{r message = FALSE, warning = FALSE, fig.align = 'center'}
 
 Ratings.Histogram
 
@@ -1013,8 +883,7 @@ variable across all 20 random forests, we get:
 
 ```{r message = FALSE, warning = FALSE}
 
-VarImps.Summary <- rbind(rowMaxs(VariableImpsByChunk), 
-  rowMeans(VariableImpsByChunk),
+VarImps.Summary <- rbind(rowMaxs(VariableImpsByChunk), rowMeans(VariableImpsByChunk),
   rowMins(VariableImpsByChunk))
 
 rownames(VarImps.Summary) <- c("max", "mean", "min")
@@ -1251,12 +1120,12 @@ MSEs:
 ```{r message = FALSE, warning = FALSE}
 
 cat("E[Var(rating|movieId, Count <= 122)]:",
-  mean(Ratings_by_Movie.Distribution$Sd_gvn_Movie[
-  Ratings_by_Movie.Distribution$Count <= 122]^2, na.rm = TRUE))
+  mean(Ratings_by_Movie.Distribution$Sd_gvn_Movie[Ratings_by_Movie.Distribution$Count <= 122]^2,
+  na.rm = TRUE))
 
 cat("E[Var(rating|movieId, Count > 122)]:",
-  mean(Ratings_by_Movie.Distribution$Sd_gvn_Movie[
-  Ratings_by_Movie.Distribution$Count > 122]^2, na.rm = TRUE))
+  mean(Ratings_by_Movie.Distribution$Sd_gvn_Movie[Ratings_by_Movie.Distribution$Count > 122]^2,
+  na.rm = TRUE))
 
 ```
 
@@ -1494,11 +1363,9 @@ to these variables:
 
 ```{r message = FALSE, warning = FALSE}
 
-cat("E[Var(rating|userId)]:",
-  mean(Ratings_by_User.Distribution$Sd_gvn_User^2))
+cat("E[Var(rating|userId)]:", mean(Ratings_by_User.Distribution$Sd_gvn_User^2))
   
-cat("E[Var(rating|movieId)]:",
-  mean(Ratings_by_Movie.Distribution$Sd_gvn_Movie^2, na.rm = TRUE))
+cat("E[Var(rating|movieId)]:", mean(Ratings_by_Movie.Distribution$Sd_gvn_Movie^2, na.rm = TRUE))
 
 ```
 
@@ -1517,10 +1384,9 @@ all of the ratings in the `edx` dataset:
 ```{r message = FALSE, warning = FALSE}
 
 cat(round(100*(sum(Ratings_by_Movie.Distribution$Count[
-  Ratings_by_Movie.Distribution$Count > 122 &
-  !is.na(Ratings_by_Movie.Distribution$Sd_gvn_Movie)])/
-  sum(Ratings_by_Movie.Distribution$Count[
-  !is.na(Ratings_by_Movie.Distribution$Sd_gvn_Movie)])), 2), "%", sep  = "") 
+  Ratings_by_Movie.Distribution$Count > 122 & !is.na(Ratings_by_Movie.Distribution$Sd_gvn_Movie)])/
+  sum(Ratings_by_Movie.Distribution$Count[!is.na(Ratings_by_Movie.Distribution$Sd_gvn_Movie)])), 2),
+  "%", sep  = "") 
 
 ```
 
@@ -1652,9 +1518,10 @@ residuals with respect to a third variable, and add the results to our
 We'd then repeat this process a number of times before choosing to stop after
 arriving at some "final take", which we'd then use as our model.
 
-Note that this process is equivalent to repeatedly applying a form of
-*principal component analysis (PCA)* that doesn't involve
-*dimension reduction* to the residuals of our model at each step.
+Note that this process is essentially *gradient boosting* and is equivalent
+to repeatedly applying a form of *principal component analysis (PCA)* that
+doesn't involve *dimension reduction* to the residuals of our model at each
+step.
 
 Our model will therefore implicitly assign different levels of importance to
 the variables within it (meaning it would be classified as a type of
@@ -1757,8 +1624,7 @@ using our model, and lastly calculate the RMSE of our model over the
 
 # Step4_TrainAndTestModel #
 
-# If the edx and validation datasets aren't already loaded in the R session,
-# load them.
+# If the edx and validation datasets aren't already loaded in the R session, load them.
 
 if(!exists("edx")){load("Data/R Data/edx.rda")}
 
@@ -1772,19 +1638,18 @@ CalculateRMSE <- function(Actual, Prediction){
 
 # Define a function to calculate regularized genre effects.
 
-DefineGenreEffects <- function(Lambda.p, train.data.p, Mu_Hat.p,
-  Movie.Effects_Hat.p, User.Effects_Hat.p, Rating_Lapse.Effects_Hat.p){
+DefineGenreEffects <- function(Lambda.p, train.data.p, Mu_Hat.p, Movie.Effects_Hat.p,
+  User.Effects_Hat.p, Rating_Lapse.Effects_Hat.p){
   GenreEffects <- tibble()
   for(j in 1:19){
-    temp_data <- train.data.p %>% left_join(Movie.Effects_Hat.p,
-      by = "movieId") %>% left_join(User.Effects_Hat.p, by = "userId") %>%
+    temp_data <- train.data.p %>% left_join(Movie.Effects_Hat.p, by = "movieId") %>%
+      left_join(User.Effects_Hat.p, by = "userId") %>%
       left_join(Rating_Lapse.Effects_Hat.p, by = "rating_lapse") %>%
       group_by_(paste("`", colnames(train.data.p)[j + 8], "`", sep = "")) %>%
-      summarize(Genre.Ct = n(), Genre.Effect_Hat = sum(rating - (Mu_Hat.p +
-      Movie.Effect_Hat + User.Effect_Hat +
-      Rating_Lapse.Effect_Hat))/(Genre.Ct + Lambda.p), .groups = "drop") %>%
-      slice_max(.[, 1]) %>% .[, 2:3] %>%
-      mutate(Genre = colnames(train.data.p)[j + 8]) %>% .[, c(3, 1:2)]
+      summarize(Genre.Ct = n(), Genre.Effect_Hat = sum(rating - (Mu_Hat.p + Movie.Effect_Hat +
+      User.Effect_Hat + Rating_Lapse.Effect_Hat))/(Genre.Ct + Lambda.p), .groups = "drop") %>%
+      slice_max(.[, 1]) %>% .[, 2:3] %>% mutate(Genre = colnames(train.data.p)[j + 8]) %>%
+      .[, c(3, 1:2)]
     if(j == 1){
       GenreEffects <- as.matrix(temp_data)
     }else{
@@ -1802,28 +1667,23 @@ CalculateGenreEffect <- function(G, B){
   ifelse(is.nan(sum(G*B)/sum(G)), 0, sum(G*B)/sum(G))
 }
 
-# Define a function to predict ratings for a provided dataset, based on the
-# provided model.
+# Define a function to predict ratings for a provided dataset, based on the provided model.
 
-Predict <- function(test.data.p, Mu_Hat.p, Movie.Effects_Hat.p,
-  User.Effects_Hat.p, Rating_Lapse.Effects_Hat.p, Genre.Effects_Hat.p,
-  CalculateGenreEffect){
-  Mu_Hat.p + (test.data.p %>%
-  inner_join(Movie.Effects_Hat.p, by = "movieId") %>% .$Movie.Effect_Hat) +
-  (test.data.p %>% inner_join(User.Effects_Hat.p, by = "userId") %>%
+Predict <- function(test.data.p, Mu_Hat.p, Movie.Effects_Hat.p, User.Effects_Hat.p,
+  Rating_Lapse.Effects_Hat.p, Genre.Effects_Hat.p, CalculateGenreEffect){
+  Mu_Hat.p + (test.data.p %>% inner_join(Movie.Effects_Hat.p, by = "movieId") %>%
+  .$Movie.Effect_Hat) + (test.data.p %>% inner_join(User.Effects_Hat.p, by = "userId") %>%
   .$User.Effect_Hat) + (test.data.p %>%
-  inner_join(Rating_Lapse.Effects_Hat.p, by = "rating_lapse") %>%
-  .$Rating_Lapse.Effect_Hat) + (test.data.p[, 9:27] %>% as.matrix() %>%
-  apply(1, function(g){CalculateGenreEffect(g,
-    B = Genre.Effects_Hat.p$Genre.Effect_Hat)}))
+  inner_join(Rating_Lapse.Effects_Hat.p, by = "rating_lapse") %>% .$Rating_Lapse.Effect_Hat) +
+  (test.data.p[, 9:27] %>% as.matrix() %>%
+  apply(1, function(g){CalculateGenreEffect(g, B = Genre.Effects_Hat.p$Genre.Effect_Hat)}))
 }
 
-# Define a function that generates a k-fold cross-validation RMSE matrix,
-# with each element corresponding to a given fold and given value of the
-# Lambda parameter. The contained code first defines the training dataset and
-# testing dataset for each fold of the cross-validation, and then, for each
-# value of Lambda, fits a model over that training dataset and evaluates that
-# fitted model over the corresponding testing dataset.
+# Define a function that generates a k-fold cross-validation RMSE matrix, with each element
+# corresponding to a given fold and given value of the Lambda parameter. The contained code first
+# defines the training dataset and testing dataset for each fold of the cross-validation, and then,
+# for each value of Lambda, fits a model over that training dataset and evaluates that fitted model
+# over the corresponding testing dataset.
 
 GenerateCvRMSEs <- function(K.p, Lambdas.p){
   set.seed(2020, sample.kind = "Rounding")
@@ -1834,46 +1694,39 @@ GenerateCvRMSEs <- function(K.p, Lambdas.p){
     
     test.data.temp <- edx[cv.test.indices[[k]]]
 
-    test.data <- test.data.temp %>%
-      semi_join(train.data.temp, by = "movieId") %>%
+    test.data <- test.data.temp %>% semi_join(train.data.temp, by = "movieId") %>%
       semi_join(train.data.temp, by = "userId")
 
-    test.data.removed_obs <- test.data.temp %>%
-      anti_join(test.data, by = c("movieId", "userId"))
+    test.data.removed_obs <- test.data.temp %>% anti_join(test.data, by = c("movieId", "userId"))
 
     train.data <- rbind(train.data.temp, test.data.removed_obs)
 
     cv.Mu_Hat <- mean(train.data$rating)
 
     for(l in Lambdas.p){
-      cv.Mu_gvn_Movie.Effects_Hat <- train.data %>% group_by(movieId) %>%
-        summarize(Movie.Ct = n(), Movie.Effect_Hat = sum(rating - cv.Mu_Hat)/
-        (Movie.Ct + l), .groups = "drop")
+      cv.Mu_gvn_Movie.Effects_Hat <- train.data %>% group_by(movieId) %>% summarize(Movie.Ct = n(),
+        Movie.Effect_Hat = sum(rating - cv.Mu_Hat)/(Movie.Ct + l), .groups = "drop")
 
       cv.Mu_gvn_User.Effects_Hat <- train.data %>%
-        left_join(cv.Mu_gvn_Movie.Effects_Hat, by = "movieId") %>%
-        group_by(userId) %>% summarize(User.Ct = n(),
-        User.Effect_Hat = sum(rating - (cv.Mu_Hat + Movie.Effect_Hat))/
+        left_join(cv.Mu_gvn_Movie.Effects_Hat, by = "movieId") %>% group_by(userId) %>%
+        summarize(User.Ct = n(), User.Effect_Hat = sum(rating - (cv.Mu_Hat + Movie.Effect_Hat))/
         (User.Ct + l), .groups = "drop")
 
       cv.Mu_gvn_Rating_Lapse.Effects_Hat <- train.data %>%
         left_join(cv.Mu_gvn_Movie.Effects_Hat, by = "movieId") %>%
-        left_join(cv.Mu_gvn_User.Effects_Hat, by = "userId") %>%
-        group_by(rating_lapse) %>% summarize(Rating_Lapse.Ct = n(),
-        Rating_Lapse.Effect_Hat =
-        sum(rating - (cv.Mu_Hat + Movie.Effect_Hat + User.Effect_Hat))/
+        left_join(cv.Mu_gvn_User.Effects_Hat, by = "userId") %>% group_by(rating_lapse) %>%
+        summarize(Rating_Lapse.Ct = n(),
+        Rating_Lapse.Effect_Hat = sum(rating - (cv.Mu_Hat + Movie.Effect_Hat + User.Effect_Hat))/
         (Rating_Lapse.Ct + l), .groups = "drop")
 
-      cv.Mu_gvn_Genre.Effects_Hat <- DefineGenreEffects(l, train.data,
-        cv.Mu_Hat, cv.Mu_gvn_Movie.Effects_Hat, cv.Mu_gvn_User.Effects_Hat,
-        cv.Mu_gvn_Rating_Lapse.Effects_Hat)
+      cv.Mu_gvn_Genre.Effects_Hat <- DefineGenreEffects(l, train.data, cv.Mu_Hat,
+        cv.Mu_gvn_Movie.Effects_Hat, cv.Mu_gvn_User.Effects_Hat, cv.Mu_gvn_Rating_Lapse.Effects_Hat)
 
       cv.Y_Hat <- Predict(test.data, cv.Mu_Hat, cv.Mu_gvn_Movie.Effects_Hat,
-        cv.Mu_gvn_User.Effects_Hat, cv.Mu_gvn_Rating_Lapse.Effects_Hat,
-        cv.Mu_gvn_Genre.Effects_Hat, CalculateGenreEffect)
+        cv.Mu_gvn_User.Effects_Hat, cv.Mu_gvn_Rating_Lapse.Effects_Hat, cv.Mu_gvn_Genre.Effects_Hat,
+        CalculateGenreEffect)
 
-      cv.RMSEs[k, which(Lambdas.p == l)] <- CalculateRMSE(test.data$rating,
-        cv.Y_Hat)
+      cv.RMSEs[k, which(Lambdas.p == l)] <- CalculateRMSE(test.data$rating, cv.Y_Hat)
 
       ProgressBar(round(100*(((k - 1)*length(Lambdas.p) +
         which(Lambdas.p == l))/(K.p*length(Lambdas.p))), 0))
@@ -1882,19 +1735,17 @@ GenerateCvRMSEs <- function(K.p, Lambdas.p){
   return(cv.RMSEs)
 }
 
-# Assign the number of folds to use for cross-validation and the values to
-# tune Lambda over.
+# Assign the number of folds to use for cross-validation and the values to tune Lambda over.
 
 K <- 5; Lambdas <- seq(4.75, 5.25, 0.05)
 
-# Define the matrix containing the output of the GenerateCvRMSEs function,
-# as well as a vector consisting of the average RMS for each of the values of
-# the Lambda parameter.
+# Define the matrix containing the output of the GenerateCvRMSEs function, as well as a vector
+# consisting of the average RMS for each of the values of the Lambda parameter.
 
 CvRMSEs <- GenerateCvRMSEs(K, Lambdas); Mu_CvRMSEs <- colMeans(CvRMSEs)
 
-# Define a plot showing the average RMSEs against the values of Lambda and
-# assign the tuned value of Lambda to Lambda_Hat.
+# Define a plot showing the average RMSEs against the values of Lambda and assign the tuned value of
+# Lambda to Lambda_Hat.
 
 Lambdas_vs_Mu_CvRMSEs.plot <- qplot(Lambdas, Mu_CvRMSEs)
 
@@ -1906,41 +1757,35 @@ Mu_Hat <- mean(edx$rating)
 
 # Define the movie effects to be used for our model.
 
-Mu_gvn_Movie.Effects_Hat <- edx %>% group_by(movieId) %>%
-  summarize(Movie.Ct = n(), Movie.Effect_Hat =
-  sum(rating - Mu_Hat)/(Movie.Ct + Lambda_Hat), .groups = "drop")
+Mu_gvn_Movie.Effects_Hat <- edx %>% group_by(movieId) %>% summarize(Movie.Ct = n(),
+  Movie.Effect_Hat = sum(rating - Mu_Hat)/(Movie.Ct + Lambda_Hat), .groups = "drop")
 
 # Define the user effects to be used for our model.
 
-Mu_gvn_User.Effects_Hat <- edx %>% left_join(Mu_gvn_Movie.Effects_Hat,
-  by = "movieId") %>% group_by(userId) %>% summarize(User.Ct = n(),
+Mu_gvn_User.Effects_Hat <- edx %>% left_join(Mu_gvn_Movie.Effects_Hat, by = "movieId") %>%
+  group_by(userId) %>% summarize(User.Ct = n(),
   User.Effect_Hat = sum(rating - (Mu_Hat + Movie.Effect_Hat))/
   (User.Ct + Lambda_Hat), .groups = "drop")
 
 # Define the rating_lapse effects to be used for our model.
 
-Mu_gvn_Rating_Lapse.Effects_Hat <- edx %>%
-  left_join(Mu_gvn_Movie.Effects_Hat, by = "movieId") %>%
-  left_join(Mu_gvn_User.Effects_Hat, by = "userId") %>%
-  group_by(rating_lapse) %>% summarize(Rating_Lapse.Ct = n(),
-  Rating_Lapse.Effect_Hat =
+Mu_gvn_Rating_Lapse.Effects_Hat <- edx %>% left_join(Mu_gvn_Movie.Effects_Hat, by = "movieId") %>%
+  left_join(Mu_gvn_User.Effects_Hat, by = "userId") %>% group_by(rating_lapse) %>%
+  summarize(Rating_Lapse.Ct = n(), Rating_Lapse.Effect_Hat =
   sum(rating - (Mu_Hat + Movie.Effect_Hat + User.Effect_Hat))/
   (Rating_Lapse.Ct + Lambda_Hat), .groups = "drop")
 
 # Define the genre effects to be used for our model.
 
-Mu_gvn_Genre.Effects_Hat <- DefineGenreEffects(Lambda_Hat, edx, Mu_Hat,
-  Mu_gvn_Movie.Effects_Hat, Mu_gvn_User.Effects_Hat,
-  Mu_gvn_Rating_Lapse.Effects_Hat)
+Mu_gvn_Genre.Effects_Hat <- DefineGenreEffects(Lambda_Hat, edx, Mu_Hat, Mu_gvn_Movie.Effects_Hat,
+  Mu_gvn_User.Effects_Hat, Mu_gvn_Rating_Lapse.Effects_Hat)
 
 # Define a vector of rating predictions for the validation dataset.
 
-Y_Hat <- Predict(validation, Mu_Hat, Mu_gvn_Movie.Effects_Hat,
-  Mu_gvn_User.Effects_Hat, Mu_gvn_Rating_Lapse.Effects_Hat,
-  Mu_gvn_Genre.Effects_Hat, CalculateGenreEffect)
+Y_Hat <- Predict(validation, Mu_Hat, Mu_gvn_Movie.Effects_Hat, Mu_gvn_User.Effects_Hat,
+  Mu_gvn_Rating_Lapse.Effects_Hat, Mu_gvn_Genre.Effects_Hat, CalculateGenreEffect)
 
-# Calculate the RMSE of our model with respect to the true ratings in the
-# validation dataset.
+# Calculate the RMSE of our model with respect to the true ratings in the validation dataset.
 
 Y_Hat.RMSE <- CalculateRMSE(validation$rating, Y_Hat)
 
@@ -1960,7 +1805,7 @@ print(Lambda_Hat)
 Here is a visual showing the expected MSE as a function of the various
 candidate values for $\lambda$:
 
-```{r message = FALSE, warning = FALSE}
+```{r message = FALSE, warning = FALSE, fig.align = 'center'}
 
 Lambdas_vs_Mu_CvRMSEs.plot
 
